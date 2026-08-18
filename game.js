@@ -2,6 +2,9 @@ const canvas = document.querySelector('#game'), ctx = canvas.getContext('2d');
 const video = document.querySelector('#webcam');
 const ui = { score:document.querySelector('#score'), best:document.querySelector('#best'), lives:document.querySelector('#lives'), combo:document.querySelector('#combo'), status:document.querySelector('#handStatus'), intro:document.querySelector('#intro'), over:document.querySelector('#gameOver'), final:document.querySelector('#finalScore') };
 let W=0,H=0, objects=[], sparks=[], trail=[], score=0,lives=3, combo=0, lastSlice=0, playing=false, handLandmarker, cameraOn=false, lastVideo=0, nextSpawn=0;
+// Throttle detection to reduce CPU/GPU usage (ms between detections)
+let lastDetectAt = 0;
+const detectIntervalMs = 66; // ~15 FPS
 let best=+localStorage.getItem('slice-spark-best')||0; ui.best.textContent=String(best).padStart(4,'0');
 const fruitTypes=[['#ff584e','#ffb547','APPLE'],['#f59ab1','#ffe1e5','PEACH'],['#f5bf27','#fff076','LEMON'],['#8ad153','#d5f790','KIWI'],['#a978db','#e5b8fa','PLUM']];
 function resize(){ const r=canvas.getBoundingClientRect(), d=devicePixelRatio; canvas.width=r.width*d;canvas.height=r.height*d;ctx.setTransform(d,0,0,d,0,0);W=r.width;H=r.height; }
@@ -18,7 +21,7 @@ function render(t){ctx.clearRect(0,0,W,H); const bg=ctx.createLinearGradient(0,0
  sparks=sparks.filter(s=>s.life>.03);for(const s of sparks){s.x+=s.vx;s.y+=s.vy;s.vy+=.13;s.life*=.94;ctx.globalAlpha=s.life;ctx.fillStyle=s.color;ctx.fillRect(s.x,s.y,s.r,s.r);}ctx.globalAlpha=1;
  trail=trail.filter(p=>t-p.t<250);if(trail.length>1){ctx.lineCap='round';ctx.lineJoin='round';for(let i=1;i<trail.length;i++){ctx.strokeStyle=`rgba(215,255,84,${i/trail.length})`;ctx.lineWidth=2+i/trail.length*7;ctx.beginPath();ctx.moveTo(trail[i-1].x,trail[i-1].y);ctx.lineTo(trail[i].x,trail[i].y);ctx.stroke();}const p=trail.at(-1);ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(p.x,p.y,4,0,7);ctx.fill();} requestAnimationFrame(render);}
 canvas.addEventListener('pointermove',e=>{const r=canvas.getBoundingClientRect();slash(e.clientX-r.left,e.clientY-r.top)}); canvas.addEventListener('pointerdown',e=>{const r=canvas.getBoundingClientRect();slash(e.clientX-r.left,e.clientY-r.top)});
-async function enableCamera(){try{const {FilesetResolver,HandLandmarker}=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22');const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:640,height:480}});video.srcObject=stream;await video.play();const vision=await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm');handLandmarker=await HandLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',delegate:'GPU'},runningMode:'VIDEO',numHands:2});cameraOn=true;video.classList.add('active');ui.status.innerHTML='<i></i> HAND READY'; document.querySelector('#cameraButton').textContent='Camera control enabled';trackHand();}catch(err){console.warn('Camera control could not start:',err);ui.status.innerHTML='<i></i> MOUSE READY';document.querySelector('#cameraButton').textContent='Camera unavailable — mouse mode works';}}
+async function enableCamera(){try{const {FilesetResolver,HandLandmarker}=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22');const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:320,height:240,frameRate:{ideal:20,max:25}}});video.srcObject=stream;await video.play();const vision=await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm');handLandmarker=await HandLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',delegate:'GPU'},runningMode:'VIDEO',numHands:2});cameraOn=true;video.classList.add('active');ui.status.innerHTML='<i></i> HAND READY'; document.querySelector('#cameraButton').textContent='Camera control enabled';trackHand();}catch(err){console.warn('Camera control could not start:',err);ui.status.innerHTML='<i></i> MOUSE READY';document.querySelector('#cameraButton').textContent='Camera unavailable — mouse mode works';}}
 
 // Better camera error reporting + retry UI
 function showCameraError(message, detail){
@@ -43,6 +46,16 @@ function showCameraError(message, detail){
 
 // Try multiple CDN endpoints for MediaPipe Tasks and initialize camera
 async function loadTasksVision(){
+	// Prefer a local vendor copy if present (place files under /vendor)
+	const localJs = '/vendor/tasks-vision.js';
+	try{
+		const head = await fetch(localJs, { method: 'HEAD' });
+		if(head && head.ok){
+			const mod = await import(localJs);
+			return { mod, baseUrl: '/vendor' };
+		}
+	}catch(e){ /* ignore and fall back to CDNs */ }
+
 	const urls = [
 		'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22',
 		'https://unpkg.com/@mediapipe/tasks-vision@0.10.22',
@@ -60,10 +73,13 @@ enableCamera = async function(){
 	try{
 		const {mod, baseUrl} = await loadTasksVision();
 		const {FilesetResolver, HandLandmarker} = mod;
-		const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:640,height:480}});
+		const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:320,height:240,frameRate:{ideal:20,max:25}}});
 		video.srcObject = stream; await video.play();
 		const vision = await FilesetResolver.forVisionTasks(baseUrl + '/wasm');
-		handLandmarker = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task', delegate: 'GPU' }, runningMode: 'VIDEO', numHands: 2 });
+		const modelAssetPath = baseUrl === '/vendor'
+			? '/vendor/hand_landmarker.task'
+			: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+		handLandmarker = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath, delegate: 'GPU' }, runningMode: 'VIDEO', numHands: 2 });
 		cameraOn = true; video.classList.add('active'); ui.status.innerHTML = '<i></i> HAND READY'; document.querySelector('#cameraButton').textContent = 'Camera control enabled'; trackHand();
 	}catch(err){
 		console.warn('enableCamera error:', err);
@@ -74,6 +90,29 @@ enableCamera = async function(){
 		document.querySelector('#cameraButton').textContent='Camera unavailable — mouse mode works';
 	}
 };
-function trackHand(){if(cameraOn&&handLandmarker&&video.currentTime!==lastVideo){lastVideo=video.currentTime;const result=handLandmarker.detectForVideo(video,performance.now());const hand=result.landmarks?.[0]?.[8];if(hand){slash((1-hand.x)*W,hand.y*H);ui.status.innerHTML='<i></i> HAND TRACKED';}else ui.status.innerHTML='<i></i> SHOW HAND';}if(cameraOn)requestAnimationFrame(trackHand);}
+function trackHand(){
+	if(!cameraOn || !handLandmarker){
+		if(cameraOn) requestAnimationFrame(trackHand);
+		return;
+	}
+	const now = performance.now();
+	if(now - lastDetectAt >= detectIntervalMs && video.currentTime !== lastVideo){
+		lastDetectAt = now;
+		lastVideo = video.currentTime;
+		try{
+			const result = handLandmarker.detectForVideo(video, now);
+			const hand = result.landmarks?.[0]?.[8];
+			if(hand){
+				slash((1-hand.x)*W, hand.y*H);
+				ui.status.innerHTML = '<i></i> HAND TRACKED';
+			} else {
+				ui.status.innerHTML = '<i></i> SHOW HAND';
+			}
+		}catch(e){
+			console.warn('hand detection error', e);
+		}
+	}
+	if(cameraOn) requestAnimationFrame(trackHand);
+}
 document.querySelector('#startButton').onclick=freshGame;document.querySelector('#restartButton').onclick=freshGame;document.querySelector('#cameraButton').onclick=enableCamera;requestAnimationFrame(render);
 
