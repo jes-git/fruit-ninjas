@@ -33,6 +33,18 @@ python -m http.server 8080
 
 If you want, I can add an in-page camera-permission error message and more robust logging to help diagnose the exact failure on your Netlify deployment.
 
+### Vendor MediaPipe (recommended for reliable camera)
+
+If CDN imports fail on your host, you can vendor the MediaPipe Tasks bundle, wasm, and model into the `vendor/` directory so the game loads them locally.
+
+Run the helper script to attempt to fetch these files (best-effort):
+
+```bash
+bash scripts/fetch_mediapipe_vendor.sh
+```
+
+If the script succeeds, commit the `vendor/` directory and push — the site will load MediaPipe from local files instead of remote CDNs.
+
 ## Continuous deployment (GitHub → Netlify)
 
 You can wire this repo to automatically deploy to Netlify when you push to `main`. I added a GitHub Actions workflow at `.github/workflows/deploy_netlify.yml` that uses the Netlify CLI.
