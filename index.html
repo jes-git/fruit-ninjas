@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Slice &amp; Spark</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="game-shell">
+      <section class="game-card" aria-label="Slice and Spark game">
+        <canvas id="game" aria-label="Fruit slicing game canvas"></canvas>
+        <video id="webcam" autoplay playsinline muted></video>
+
+        <div class="topbar">
+          <div class="brand"><span class="brand-mark">✦</span><span>SLICE<span>&amp;</span>SPARK</span></div>
+          <div class="stats"><div><small>SCORE</small><b id="score">0000</b></div><div><small>BEST</small><b id="best">0000</b></div></div>
+        </div>
+
+        <div class="hud-bottom">
+          <div class="lives" id="lives" aria-label="lives">♥ ♥ ♥</div>
+          <div class="combo" id="combo"></div>
+          <div class="hand-status" id="handStatus"><i></i> MOUSE READY</div>
+        </div>
+
+        <div class="intro" id="intro">
+          <p class="eyebrow">HAND-TRACKED ARCADE</p>
+          <h1>Slice the<br /><em>moment.</em></h1>
+          <p class="intro-copy">Use your index finger as a blade. Or drag your mouse to play instantly.</p>
+          <button id="startButton">Start slicing <span>→</span></button>
+          <button class="camera-button" id="cameraButton">Enable camera control</button>
+        </div>
+
+        <div class="game-over hidden" id="gameOver">
+          <p class="eyebrow">ROUND COMPLETE</p>
+          <h2>Nice slicing.</h2>
+          <p>Final score <strong id="finalScore">0</strong></p>
+          <button id="restartButton">Play again <span>↻</span></button>
+        </div>
+      </section>
+      <p class="hint">Move quickly through fruit to slice · Avoid the bombs</p>
+    </main>
+    <script type="module" src="game.js"></script>
+  </body>
+</html>
+
